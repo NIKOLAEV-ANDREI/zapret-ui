@@ -1,7 +1,7 @@
 {
-  "version": "1.0.1",
+  "version": "1.0.2",
   "download_url": "https://github.com/NIKOLAEV-ANDREI/zapret-ui/releases/latest/download/zapret-ui-app.exe",
   "release_url": "https://github.com/NIKOLAEV-ANDREI/zapret-ui/releases/latest",
-  "sha256": "076f99d0cb45c5973d06ea456ddf29039b8037a2fe459fdf2bbfbd1156fc3026",
-  "notes": "Добавлены кнопки перехода к проектам и кликабельные пояснения на карточках статуса."
+  "sha256": "38754f5ac14b511e5efa49d49479d5d6f790b25431dec04e330b441deb0563a7",
+  "notes": "\u0418\u0441\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u043e \u043e\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u0438\u0435 \u0432\u0435\u0440\u0441\u0438\u0438 \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u044f \u043f\u043e\u0441\u043b\u0435 \u0440\u0443\u0447\u043d\u043e\u0439 \u0437\u0430\u043c\u0435\u043d\u044b exe. \u0422\u0435\u043f\u0435\u0440\u044c \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435 \u0443\u0441\u0442\u0430\u043d\u0430\u0432\u043b\u0438\u0432\u0430\u0435\u0442\u0441\u044f \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0438 \u0431\u0435\u0437 \u0440\u0443\u0447\u043d\u043e\u0439 \u0437\u0430\u043c\u0435\u043d\u044b \u0444\u0430\u0439\u043b\u043e\u0432."
 }
