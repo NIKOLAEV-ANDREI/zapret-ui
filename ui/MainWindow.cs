@@ -106,6 +106,7 @@ namespace zapret
         private volatile bool cancelTests;
         private bool testsRunning;
         private bool updateCheckStarted;
+        private bool bypassCloseConfirmation;
         private List<StrategySummary> recommendedStrategies = new List<StrategySummary>();
 
         public MainWindow()
@@ -148,11 +149,19 @@ namespace zapret
             InitializeTray();
             Navigate(PageKind.Home);
             RefreshStatus();
+            ShowPendingAppUpdateNotice();
             BeginAutoUpdateCheck();
         }
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
+            if (bypassCloseConfirmation)
+            {
+                DisposeTray();
+                base.OnClosing(e);
+                return;
+            }
+
             var runtime = manager.GetRuntimeStatus();
             var active = runtime.WinwsRunning || runtime.ZapretServiceRunning;
 
@@ -171,14 +180,19 @@ namespace zapret
                 manager.StopProtection();
             }
 
+            DisposeTray();
+
+            base.OnClosing(e);
+        }
+
+        private void DisposeTray()
+        {
             if (trayIcon != null)
             {
                 trayIcon.Visible = false;
                 trayIcon.Dispose();
                 trayIcon = null;
             }
-
-            base.OnClosing(e);
         }
 
         private void InitializeTray()
@@ -1167,11 +1181,12 @@ namespace zapret
             serviceToggle = SettingsToggle("Запускать приложение вместе с Windows", "Открывает Zapret при входе в Windows. Конфиг сам по себе не запускается: его нужно включить в приложении.", manager.IsAppStartupEnabled(), OnServiceToggleChanged);
             panel.Children.Add(serviceToggle);
 
-            updateCheckToggle = SettingsToggle("Авто-проверка обновлений", "При запуске проверяет наличие новой версии zapret.", manager.IsUpdateCheckEnabled(), OnUpdateCheckToggleChanged);
+            updateCheckToggle = SettingsToggle("Авто-проверка обновлений", "При запуске проверяет наличие новой версии приложения и zapret.", manager.IsUpdateCheckEnabled(), OnUpdateCheckToggleChanged);
             panel.Children.Add(updateCheckToggle);
 
             panel.Children.Add(SettingsToggle("Темная тема", "Меняет оформление приложения. На работу zapret это не влияет.", isDarkTheme, OnThemeToggleChanged));
 
+            panel.Children.Add(SettingsBlock("Обновление приложения", "Проверяет новую версию интерфейса Zapret, скачивает ее и устанавливает после перезапуска приложения.", BuildAppUpdateActions()));
             panel.Children.Add(SettingsBlock("Обновление zapret", "Проверяет новую версию, предлагает скачать zip-релиз, сохраняет backup и позволяет откатиться.", BuildZapretUpdateActions()));
             panel.Children.Add(SettingsBlock("Game Filter", "Расширяет обработку трафика на игровые TCP/UDP-порты. Применяется после перезапуска конфига.", BuildGameFilterSettings()));
             panel.Children.Add(SettingsBlock("IPSet", "Режим списка IP-диапазонов для стратегий. Обычно лучше оставить loaded.", BuildIpsetSettings()));
@@ -1432,6 +1447,24 @@ namespace zapret
             return row;
         }
 
+        private UIElement BuildAppUpdateActions()
+        {
+            var panel = new StackPanel();
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Установленная версия: " + manager.GetInstalledAppVersion(),
+                Foreground = Brush(theme.Text),
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 0, 0, 10)
+            });
+
+            var row = new UniformGrid { Columns = 1 };
+            row.Children.Add(ActionButton("Проверить приложение", OnCheckAppUpdatesClick, true));
+            ApplyUniformGridSpacing(row, 10);
+            panel.Children.Add(row);
+            return panel;
+        }
+
         private UIElement BuildZapretUpdateActions()
         {
             var panel = new StackPanel();
@@ -1683,6 +1716,11 @@ namespace zapret
             RunAction("Обновление IPSet", delegate { return manager.UpdateIpset(); });
         }
 
+        private void OnCheckAppUpdatesClick(object sender, RoutedEventArgs e)
+        {
+            CheckAppUpdate(true, false);
+        }
+
         private void OnCheckUpdatesClick(object sender, RoutedEventArgs e)
         {
             CheckZapretUpdate(true);
@@ -1695,8 +1733,110 @@ namespace zapret
 
             Dispatcher.BeginInvoke(new Action(delegate
             {
-                CheckZapretUpdate(false);
+                CheckAppUpdate(false, true);
             }));
+        }
+
+        private void ShowPendingAppUpdateNotice()
+        {
+            var notice = manager.PopAppUpdateInstalledNotice();
+            if (!string.IsNullOrWhiteSpace(notice))
+            {
+                Dispatcher.BeginInvoke(new Action(delegate
+                {
+                    Log(notice);
+                    ShowInfoDialog("Обновление установлено", notice);
+                }));
+            }
+        }
+
+        private void CheckAppUpdate(bool manual, bool checkZapretAfter)
+        {
+            SetBusy(true);
+            Log("Проверка обновлений приложения...");
+
+            Task.Factory.StartNew(delegate
+            {
+                try
+                {
+                    var update = manager.GetAvailableAppUpdate();
+                    Dispatcher.Invoke(new Action(delegate
+                    {
+                        SetBusy(false);
+                        RefreshStatus();
+
+                        if (!update.HasUpdate)
+                        {
+                            var message = "Установлена актуальная версия приложения: " + update.CurrentVersion;
+                            Log(message);
+                            if (manual) ShowInfoDialog("Обновления приложения", message);
+                            if (checkZapretAfter) CheckZapretUpdate(false);
+                            return;
+                        }
+
+                        PromptInstallAppUpdate(update, checkZapretAfter);
+                    }));
+                }
+                catch (Exception ex)
+                {
+                    Dispatcher.Invoke(new Action(delegate
+                    {
+                        SetBusy(false);
+                        RefreshStatus();
+                        Log("Ошибка проверки обновления приложения: " + ex.Message);
+                        if (manual) ShowInfoDialog("Ошибка проверки обновления приложения", ex.Message);
+                        if (checkZapretAfter) CheckZapretUpdate(false);
+                    }));
+                }
+            });
+        }
+
+        private void PromptInstallAppUpdate(UpdateInfo update, bool checkZapretAfter)
+        {
+            var current = string.IsNullOrWhiteSpace(update.CurrentVersion) ? "неизвестно" : update.CurrentVersion;
+            var message = "Текущая версия: " + current + Environment.NewLine +
+                          "Новая версия: " + update.LatestVersion;
+            if (!string.IsNullOrWhiteSpace(update.Notes))
+            {
+                message += Environment.NewLine + Environment.NewLine + update.Notes;
+            }
+
+            if (!ShowConfirmationDialog("Доступна новая версия приложения", message, "Скачать и установить", false))
+            {
+                Log("Обновление приложения отменено пользователем.");
+                if (checkZapretAfter) CheckZapretUpdate(false);
+                return;
+            }
+
+            SetBusy(true);
+            Log("Скачивание обновления приложения...");
+
+            Task.Factory.StartNew(delegate
+            {
+                try
+                {
+                    var result = manager.PrepareAppUpdate(update);
+                    Dispatcher.Invoke(new Action(delegate
+                    {
+                        SetBusy(false);
+                        Log(result);
+                        ShowInfoDialog("Обновление скачано", "Новая версия приложения скачана. Сейчас Zapret закроется, установит обновление и запустится снова.");
+                        manager.StartAppUpdateInstaller();
+                        bypassCloseConfirmation = true;
+                        Close();
+                    }));
+                }
+                catch (Exception ex)
+                {
+                    Dispatcher.Invoke(new Action(delegate
+                    {
+                        SetBusy(false);
+                        RefreshStatus();
+                        Log("Ошибка обновления приложения: " + ex.Message);
+                        ShowInfoDialog("Ошибка обновления приложения", ex.Message);
+                    }));
+                }
+            });
         }
 
         private void CheckZapretUpdate(bool manual)

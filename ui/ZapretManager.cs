@@ -6,6 +6,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net;
+using System.Security.Cryptography;
 using System.ServiceProcess;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -21,6 +22,10 @@ namespace zapret
         private const string RepositoryRawBaseUrl = "https://raw.githubusercontent.com/" + RepositoryOwner + "/" + RepositoryName + "/refs/heads/main";
         private const string ReleasesApiUrl = "https://api.github.com/repos/" + RepositoryOwner + "/" + RepositoryName + "/releases/latest";
         private const string LocalVersionFileName = "zapret_version.txt";
+        private const string LocalAppVersionFileName = "app_version.txt";
+        private const string AppVersionManifestUrl = RepositoryRawBaseUrl + "/.service/app-version.json";
+        private const string AppUpdatePendingVersionFileName = "app_update_pending.version";
+        private const string AppUpdateInstalledNoticeFileName = "app_update_installed.notice";
         private readonly AppPaths paths;
 
         public ZapretManager(AppPaths paths)
@@ -291,6 +296,24 @@ namespace zapret
             return GetLocalZapretVersion();
         }
 
+        public string GetInstalledAppVersion()
+        {
+            return GetLocalAppVersion();
+        }
+
+        public string PopAppUpdateInstalledNotice()
+        {
+            var file = Path.Combine(paths.Utils, AppUpdateInstalledNoticeFileName);
+            if (!File.Exists(file))
+            {
+                return null;
+            }
+
+            var text = File.ReadAllText(file, Encoding.UTF8).Trim();
+            try { File.Delete(file); } catch { }
+            return string.IsNullOrWhiteSpace(text) ? null : text;
+        }
+
         public string GetFeedbackBotUrl()
         {
             var file = Path.Combine(paths.Utils, "feedback_bot.url");
@@ -321,6 +344,82 @@ namespace zapret
             latest.CurrentVersion = current;
             latest.HasUpdate = !SameVersion(current, latest.LatestVersion);
             return latest;
+        }
+
+        public UpdateInfo GetAvailableAppUpdate()
+        {
+            var current = GetLocalAppVersion();
+            var latest = GetLatestAppReleaseInfo();
+            latest.CurrentVersion = current;
+            latest.HasUpdate = !SameVersion(current, latest.LatestVersion);
+            return latest;
+        }
+
+        public string PrepareAppUpdate(UpdateInfo update)
+        {
+            if (update == null) throw new ArgumentNullException("update");
+            if (string.IsNullOrWhiteSpace(update.DownloadUrl)) throw new InvalidOperationException("Не найдена ссылка на новую версию приложения.");
+
+            var tempRoot = Path.Combine(Path.GetTempPath(), "zapret-app-update-" + Guid.NewGuid().ToString("N"));
+            var downloaded = Path.Combine(tempRoot, "zapret.exe");
+            var currentExe = Path.Combine(paths.Root, "zapret.exe");
+            var nextExe = Path.Combine(paths.Root, "zapret.next.exe");
+
+            Directory.CreateDirectory(tempRoot);
+            try
+            {
+                using (var client = CreateWebClient())
+                {
+                    client.DownloadFile(update.DownloadUrl, downloaded);
+                }
+
+                if (!string.IsNullOrWhiteSpace(update.Sha256))
+                {
+                    var actual = Sha256File(downloaded);
+                    if (!string.Equals(actual, update.Sha256.Trim(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidOperationException("Контрольная сумма обновления приложения не совпадает.");
+                    }
+                }
+
+                var backupDir = Path.Combine(paths.Root, "app-backups");
+                Directory.CreateDirectory(backupDir);
+                if (File.Exists(currentExe))
+                {
+                    var backupName = "zapret-" + GetLocalAppVersion() + "-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".exe";
+                    File.Copy(currentExe, Path.Combine(backupDir, backupName), true);
+                }
+
+                File.Copy(downloaded, nextExe, true);
+                Directory.CreateDirectory(paths.Utils);
+                File.WriteAllText(Path.Combine(paths.Utils, AppUpdatePendingVersionFileName), NormalizeVersion(update.LatestVersion), new UTF8Encoding(false));
+
+                return "Новая версия приложения скачана: " + update.LatestVersion + Environment.NewLine +
+                       "После закрытия приложение установит обновление и запустится снова.";
+            }
+            finally
+            {
+                try { Directory.Delete(tempRoot, true); } catch { }
+            }
+        }
+
+        public void StartAppUpdateInstaller()
+        {
+            var script = Path.Combine(paths.Root, "ui", "apply-ui-update.ps1");
+            if (!File.Exists(script))
+            {
+                throw new FileNotFoundException("Скрипт обновления приложения не найден.", script);
+            }
+
+            var info = new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = "-NoProfile -ExecutionPolicy Bypass -File " + Shell.Quote(script),
+                WorkingDirectory = paths.Root,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            Process.Start(info);
         }
 
         public string InstallZapretUpdate(UpdateInfo update)
@@ -437,6 +536,39 @@ namespace zapret
             }
         }
 
+        private UpdateInfo GetLatestAppReleaseInfo()
+        {
+            using (var client = CreateWebClient())
+            {
+                var json = client.DownloadString(AppVersionManifestUrl);
+                var version = MatchJsonString(json, "version");
+                var downloadUrl = MatchJsonString(json, "download_url");
+                if (string.IsNullOrWhiteSpace(downloadUrl))
+                {
+                    downloadUrl = MatchJsonString(json, "url");
+                }
+
+                if (string.IsNullOrWhiteSpace(version))
+                {
+                    throw new InvalidOperationException("Манифест обновления приложения не содержит версию.");
+                }
+
+                if (string.IsNullOrWhiteSpace(downloadUrl))
+                {
+                    throw new InvalidOperationException("Манифест обновления приложения не содержит ссылку на загрузку.");
+                }
+
+                return new UpdateInfo
+                {
+                    LatestVersion = NormalizeVersion(version),
+                    DownloadUrl = downloadUrl,
+                    ReleaseUrl = MatchJsonString(json, "release_url"),
+                    Sha256 = MatchJsonString(json, "sha256"),
+                    Notes = MatchJsonString(json, "notes")
+                };
+            }
+        }
+
         private static WebClient CreateWebClient()
         {
             var client = new WebClient();
@@ -477,6 +609,18 @@ namespace zapret
             return "неизвестно";
         }
 
+        private string GetLocalAppVersion()
+        {
+            var file = Path.Combine(paths.Utils, LocalAppVersionFileName);
+            if (File.Exists(file))
+            {
+                var value = File.ReadAllText(file, Encoding.UTF8).Trim();
+                if (!string.IsNullOrWhiteSpace(value)) return NormalizeVersion(value);
+            }
+
+            return "неизвестно";
+        }
+
         private void SetLocalZapretVersion(string version)
         {
             Directory.CreateDirectory(paths.Utils);
@@ -497,6 +641,15 @@ namespace zapret
             return !string.IsNullOrWhiteSpace(current)
                 && !string.Equals(current, "неизвестно", StringComparison.OrdinalIgnoreCase)
                 && string.Equals(current, latest, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string Sha256File(string file)
+        {
+            using (var stream = File.OpenRead(file))
+            using (var sha = SHA256.Create())
+            {
+                return BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
+            }
         }
 
         private string CreateZapretBackup()

@@ -59,6 +59,7 @@ jobs:
           zip -qr "${NAME}.zip" "$NAME"
           rar a -idq "${NAME}.rar" "$NAME"
           tar --owner=0 --group=0 -czf "${NAME}.tar.gz" "$NAME"
+          cp zapret.exe zapret-ui-app.exe
 
       - name: Print SHA256 checksums
         run: |
@@ -67,7 +68,8 @@ jobs:
           sha256sum \
             "${NAME}.zip" \
             "${NAME}.rar" \
-            "${NAME}.tar.gz"
+            "${NAME}.tar.gz" \
+            zapret-ui-app.exe
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -78,3 +80,4 @@ jobs:
             zapret-ui-${{ github.event.inputs.tag }}.zip
             zapret-ui-${{ github.event.inputs.tag }}.rar
             zapret-ui-${{ github.event.inputs.tag }}.tar.gz
+            zapret-ui-app.exe
