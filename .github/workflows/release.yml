@@ -19,7 +19,7 @@ jobs:
 
       - name: Verify release tag matches app version
         run: |
-          APP_VERSION=$(cat utils/app_version.txt)
+          APP_VERSION=$(tr -d '\r\n' < utils/app_version.txt)
           EXPECTED_TAG="app-${APP_VERSION}"
           if [ "$EXPECTED_TAG" != "${{ github.event.inputs.tag }}" ]; then
             echo "Error: tag '${{ github.event.inputs.tag }}' does not match app version tag '${EXPECTED_TAG}'"
