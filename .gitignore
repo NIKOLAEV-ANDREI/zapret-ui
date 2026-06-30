@@ -1,0 +1,23 @@
+# Local backups created by the updater.
+/backups/
+
+# Local build output.
+/ui-build/
+
+# Runtime state and diagnostics.
+/utils/settings.json
+/utils/state.json
+/utils/zapret_version.txt
+/utils/ui_*
+/utils/test results/
+/lists/*-user*
+/SHA256SUMS.txt
+*.log
+.env
+
+# Windows/editor noise.
+Thumbs.db
+Desktop.ini
+.vs/
+.idea/
+*.user
