@@ -1504,8 +1504,13 @@ namespace zapret
                 Margin = new Thickness(0, 0, 0, 6)
             });
 
-            panel.Children.Add(MutedText("Репозиторий: github.com/NIKOLAEV-ANDREI/zapret-ui"));
-            panel.Children.Add(MutedText("Основа проекта: Flowseal/zapret-discord-youtube."));
+            var links = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 12) };
+            links.Children.Add(LinkButton("Zapret UI", "https://github.com/NIKOLAEV-ANDREI/zapret-ui"));
+            links.Children.Add(LinkButton("Сборка Flowseal", "https://github.com/Flowseal/zapret-discord-youtube"));
+            links.Children.Add(LinkButton("Оригинальный zapret", "https://github.com/bol-van/zapret"));
+            ApplyHorizontalSpacing(links, 8);
+            panel.Children.Add(links);
+
             panel.Children.Add(MutedText("Интерфейс управляет запуском конфигов, диагностикой, списками, обновлениями и откатом zapret."));
             return panel;
         }
@@ -1555,12 +1560,17 @@ namespace zapret
 
             try
             {
-                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                OpenExternalUrl(url);
             }
             catch (Exception ex)
             {
                 ShowInfoDialog("Не удалось открыть ссылку", ex.Message);
             }
+        }
+
+        private void OpenExternalUrl(string url)
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
         }
 
         private int GameFilterSelectedIndex(string status)
@@ -2431,6 +2441,30 @@ namespace zapret
             return button;
         }
 
+        private Button LinkButton(string text, string url)
+        {
+            var button = new Button();
+            button.Content = text;
+            button.MinHeight = 34;
+            button.MinWidth = 126;
+            button.Padding = new Thickness(12, 0, 12, 0);
+            button.Cursor = Cursors.Hand;
+            button.ToolTip = url;
+            button.Click += delegate
+            {
+                try
+                {
+                    OpenExternalUrl(url);
+                }
+                catch (Exception ex)
+                {
+                    ShowInfoDialog("Не удалось открыть ссылку", ex.Message);
+                }
+            };
+            button.Style = ButtonStyle(Brush(theme.SurfaceAlt), Brush(theme.AccentSoft), Brush(theme.Text), new CornerRadius(12), true);
+            return button;
+        }
+
         private Button PowerButton(string text, RoutedEventHandler handler)
         {
             var button = new Button();
@@ -2625,29 +2659,21 @@ namespace zapret
             Grid.SetColumn(titleText, 0);
             header.Children.Add(titleText);
 
-            var infoBadge = new Border
+            var infoButton = new Button
             {
+                Content = "i",
                 Width = 20,
                 Height = 20,
-                CornerRadius = new CornerRadius(10),
-                Background = Brush(theme.SurfaceAlt),
-                BorderBrush = Brush(theme.Stroke),
-                BorderThickness = new Thickness(1),
-                ToolTip = info,
-                Margin = new Thickness(8, 0, 0, 0)
-            };
-            var infoText = new TextBlock
-            {
-                Text = "i",
-                Foreground = Brush(theme.Accent),
+                Margin = new Thickness(8, 0, 0, 0),
                 FontSize = 12,
                 FontWeight = FontWeights.Bold,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
+                Cursor = Cursors.Hand,
+                ToolTip = "Подробнее"
             };
-            infoBadge.Child = infoText;
-            Grid.SetColumn(infoBadge, 1);
-            header.Children.Add(infoBadge);
+            infoButton.Click += delegate { ShowInfoDialog(title, info); };
+            infoButton.Style = ButtonStyle(Brush(theme.SurfaceAlt), Brush(theme.AccentSoft), Brush(theme.Accent), new CornerRadius(10), true);
+            Grid.SetColumn(infoButton, 1);
+            header.Children.Add(infoButton);
 
             valueText = new TextBlock
             {

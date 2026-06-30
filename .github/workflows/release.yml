@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag'
+        description: 'Application release tag, for example app-1.0.1'
         required: true
 
 jobs:
@@ -17,11 +17,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Verify version matches version.txt
+      - name: Verify release tag matches app version
         run: |
-          VERSION=$(cat .service/version.txt)
-          if [ "$VERSION" != "${{ github.event.inputs.tag }}" ]; then
-            echo "Error: tag '${{ github.event.inputs.tag }}' does not match .service/version.txt ('$VERSION')"
+          APP_VERSION=$(cat utils/app_version.txt)
+          EXPECTED_TAG="app-${APP_VERSION}"
+          if [ "$EXPECTED_TAG" != "${{ github.event.inputs.tag }}" ]; then
+            echo "Error: tag '${{ github.event.inputs.tag }}' does not match app version tag '${EXPECTED_TAG}'"
             exit 1
           fi
 

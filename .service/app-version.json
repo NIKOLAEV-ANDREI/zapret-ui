@@ -1,7 +1,7 @@
 {
-  "version": "1.0.0",
+  "version": "1.0.1",
   "download_url": "https://github.com/NIKOLAEV-ANDREI/zapret-ui/releases/latest/download/zapret-ui-app.exe",
   "release_url": "https://github.com/NIKOLAEV-ANDREI/zapret-ui/releases/latest",
-  "sha256": "2ee1b2b5c0902bbe5fb2ac90c812ba5ccee13c518a7e4f2cd7742286411e36dd",
-  "notes": "Добавлена отдельная проверка обновлений приложения Zapret UI."
+  "sha256": "076f99d0cb45c5973d06ea456ddf29039b8037a2fe459fdf2bbfbd1156fc3026",
+  "notes": "Добавлены кнопки перехода к проектам и кликабельные пояснения на карточках статуса."
 }

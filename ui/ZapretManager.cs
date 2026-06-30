@@ -21,6 +21,7 @@ namespace zapret
         private const string RepositoryName = "zapret-ui";
         private const string RepositoryRawBaseUrl = "https://raw.githubusercontent.com/" + RepositoryOwner + "/" + RepositoryName + "/refs/heads/main";
         private const string ReleasesApiUrl = "https://api.github.com/repos/" + RepositoryOwner + "/" + RepositoryName + "/releases/latest";
+        private const string ZapretVersionUrl = RepositoryRawBaseUrl + "/.service/version.txt";
         private const string LocalVersionFileName = "zapret_version.txt";
         private const string LocalAppVersionFileName = "app_version.txt";
         private const string AppVersionManifestUrl = RepositoryRawBaseUrl + "/.service/app-version.json";
@@ -513,13 +514,13 @@ namespace zapret
             using (var client = CreateWebClient())
             {
                 var json = client.DownloadString(ReleasesApiUrl);
-                var tag = MatchJsonString(json, "tag_name");
+                var version = client.DownloadString(ZapretVersionUrl).Trim();
                 var htmlUrl = MatchJsonString(json, "html_url");
                 var assetUrl = MatchZipAssetUrl(json);
 
-                if (string.IsNullOrWhiteSpace(tag))
+                if (string.IsNullOrWhiteSpace(version))
                 {
-                    throw new InvalidOperationException("GitHub API не вернул версию релиза.");
+                    throw new InvalidOperationException("Не удалось получить версию zapret из репозитория.");
                 }
 
                 if (string.IsNullOrWhiteSpace(assetUrl))
@@ -529,7 +530,7 @@ namespace zapret
 
                 return new UpdateInfo
                 {
-                    LatestVersion = NormalizeVersion(tag),
+                    LatestVersion = NormalizeVersion(version),
                     ReleaseUrl = htmlUrl,
                     DownloadUrl = assetUrl
                 };
