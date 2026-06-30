@@ -23,7 +23,7 @@ namespace zapret
         private const string ReleasesApiUrl = "https://api.github.com/repos/" + RepositoryOwner + "/" + RepositoryName + "/releases/latest";
         private const string ZapretVersionUrl = RepositoryRawBaseUrl + "/.service/version.txt";
         private const string LocalVersionFileName = "zapret_version.txt";
-        private const string LocalAppVersionFileName = "app_version.txt";
+        private const string BuiltInAppVersion = "1.0.2";
         private const string AppVersionManifestUrl = RepositoryRawBaseUrl + "/.service/app-version.json";
         private const string AppUpdatePendingVersionFileName = "app_update_pending.version";
         private const string AppUpdateInstalledNoticeFileName = "app_update_installed.notice";
@@ -352,7 +352,7 @@ namespace zapret
             var current = GetLocalAppVersion();
             var latest = GetLatestAppReleaseInfo();
             latest.CurrentVersion = current;
-            latest.HasUpdate = !SameVersion(current, latest.LatestVersion);
+            latest.HasUpdate = IsNewerAppVersion(latest.LatestVersion, current);
             return latest;
         }
 
@@ -573,6 +573,7 @@ namespace zapret
         private static WebClient CreateWebClient()
         {
             var client = new WebClient();
+            client.Encoding = Encoding.UTF8;
             client.Headers[HttpRequestHeader.UserAgent] = "Zapret";
             return client;
         }
@@ -612,14 +613,7 @@ namespace zapret
 
         private string GetLocalAppVersion()
         {
-            var file = Path.Combine(paths.Utils, LocalAppVersionFileName);
-            if (File.Exists(file))
-            {
-                var value = File.ReadAllText(file, Encoding.UTF8).Trim();
-                if (!string.IsNullOrWhiteSpace(value)) return NormalizeVersion(value);
-            }
-
-            return "неизвестно";
+            return BuiltInAppVersion;
         }
 
         private void SetLocalZapretVersion(string version)
@@ -642,6 +636,37 @@ namespace zapret
             return !string.IsNullOrWhiteSpace(current)
                 && !string.Equals(current, "неизвестно", StringComparison.OrdinalIgnoreCase)
                 && string.Equals(current, latest, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsNewerAppVersion(string latest, string current)
+        {
+            latest = NormalizeVersion(latest);
+            current = NormalizeVersion(current);
+
+            if (string.IsNullOrWhiteSpace(latest)) return false;
+            if (string.IsNullOrWhiteSpace(current) || string.Equals(current, "неизвестно", StringComparison.OrdinalIgnoreCase)) return true;
+
+            var latestParts = latest.Split('.');
+            var currentParts = current.Split('.');
+            var length = Math.Max(latestParts.Length, currentParts.Length);
+
+            for (var i = 0; i < length; i++)
+            {
+                var latestPart = i < latestParts.Length ? latestParts[i] : "0";
+                var currentPart = i < currentParts.Length ? currentParts[i] : "0";
+                int latestNumber;
+                int currentNumber;
+
+                if (!int.TryParse(latestPart, out latestNumber) || !int.TryParse(currentPart, out currentNumber))
+                {
+                    return !string.Equals(latest, current, StringComparison.OrdinalIgnoreCase);
+                }
+
+                if (latestNumber > currentNumber) return true;
+                if (latestNumber < currentNumber) return false;
+            }
+
+            return false;
         }
 
         private static string Sha256File(string file)
